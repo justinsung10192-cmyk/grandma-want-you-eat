@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>阿嬤覺得你超餓 Grandma's Endless Feast</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      touch-action: manipulation;
+      background-color: #450a0a;
+      background-image: radial-gradient(#7f1d1d 1px, transparent 1px);
+      background-size: 16px 16px;
+    }
+
+    /* 自訂驚悚與警戒動畫 */
+    @keyframes pulse-danger {
+      0%, 100% { box-shadow: 0 0 20px rgba(220, 38, 38, 0.8), inset 0 0 15px rgba(220, 38, 38, 0.5); }
+      50% { box-shadow: 0 0 35px rgba(239, 68, 68, 1), inset 0 0 25px rgba(239, 68, 68, 0.8); }
+    }
+    .danger-border {
+      animation: pulse-danger 0.6s infinite;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      20% { transform: translate(-3px, 2px) rotate(-1deg); }
+      40% { transform: translate(3px, -2px) rotate(1deg); }
+      60% { transform: translate(-2px, -1px) rotate(-1deg); }
+      80% { transform: translate(2px, 2px) rotate(1deg); }
+    }
+    .shake-anim {
+      animation: shake 0.25s infinite;
+    }
+
+    canvas {
+      cursor: dropzone;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-2 sm:p-4 text-slate-100 select-none overflow-x-hidden">
+
+  <!-- 遊戲主容器面板 -->
+  <div class="w-full max-w-xl bg-amber-950/90 border-4 border-amber-500/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col relative backdrop-blur-md">
+    
+    <!-- 頂部遊戲標題與狀態列 -->
+    <header class="bg-gradient-to-r from-red-900 via-red-800 to-amber-900 px-4 py-3 border-b-2 border-amber-500/50 flex justify-between items-center relative z-10">
+      <div>
+        <h1 class="text-xl sm:text-2xl font-black tracking-wider text-amber-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+          👵 阿嬤覺得你超餓
+        </h1>
+        <p class="text-xs text-amber-200/80">過年過節大作戰：絕不爆胃！</p>
+      </div>
+      <div class="text-right">
+        <div class="text-xs text-amber-200 font-bold">當前得分</div>
+        <div id="scoreDisplay" class="text-2xl font-black text-amber-400 tracking-wider">0</div>
+      </div>
+    </header>
+
+    <!-- 遊戲抬頭顯示儀表 (HUD) -->
+    <div class="bg-amber-900/60 p-3 grid grid-cols-12 gap-2 items-center border-b border-amber-800/60">
+      
+      <!-- 胃容量指示器 -->
+      <div class="col-span-7 flex flex-col justify-center">
+        <div class="flex justify-between items-center mb-1">
+          <span class="text-xs font-bold text-amber-200 flex items-center gap-1">
+            <span>🍚 胃容量</span>
+            <span id="stomachText" class="text-amber-300">0%</span>
+          </span>
+          <span id="stomachStatus" class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-800 text-emerald-200 font-bold">還能塞</span>
+        </div>
+        <div id="stomachBarOuter" class="w-full h-4 bg-slate-900/80 rounded-full p-0.5 border border-amber-600/40 overflow-hidden relative">
+          <div id="stomachBar" class="h-full bg-gradient-to-r from-emerald-500 via-amber-400 to-red-500 rounded-full transition-all duration-150 w-0"></div>
+        </div>
+      </div>
+
+      <!-- 阿嬤警戒狀態視窗 -->
+      <div class="col-span-5 flex items-center justify-end">
+        <div id="grandmaBadge" class="flex items-center gap-2 bg-emerald-950 border border-emerald-500/50 px-2.5 py-1.5 rounded-xl transition-all duration-200 w-full justify-center">
+          <span id="grandmaIcon" class="text-2xl">👵</span>
+          <div class="flex flex-col">
+            <span class="text-[10px] text-slate-300 font-bold">阿嬤視線</span>
+            <span id="grandmaStatusText" class="text-xs font-black text-emerald-400">專心煮菜中</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Canvas 遊戲畫面畫布 -->
+    <div class="relative w-full aspect-[4/5] bg-amber-100 overflow-hidden flex items-center justify-center">
+      <canvas id="gameCanvas" class="w-full h-full block"></canvas>
+
+      <!-- UI 開始選單 overlay -->
+      <div id="startScreen" class="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-20 transition-opacity duration-300">
+        <div class="text-5xl mb-2 animate-bounce">👵🍲🐕</div>
+        <h2 class="text-2xl sm:text-3xl font-black text-amber-400 mb-2">阿嬤覺得你超餓！</h2>
+        <p class="text-sm text-slate-200 max-w-sm mb-4 leading-relaxed">
+          過年回阿嬤家，阿嬤瘋狂狂夾菜給你！<br>
+          接到食物會增加<span class="text-red-400 font-bold">「胃容量」</span>，達到 100% 胃會爆開裂開！<br>
+          趁阿嬤不注意時，按 <span class="bg-amber-500 text-black px-1.5 py-0.5 rounded font-black">空白鍵</span> 把食物清給<span class="text-yellow-300 font-bold">小黃狗</span>減傷！
+        </p>
+
+        <div class="bg-amber-900/60 p-3 rounded-xl text-xs text-amber-200 max-w-xs mb-6 text-left border border-amber-500/30 space-y-1">
+          <div>⚠️ <span class="font-bold text-yellow-300">阿嬤亮起驚嘆號</span>：準備轉頭過來！</div>
+          <div>👀 <span class="font-bold text-red-400">阿嬤轉頭盯著你</span>：千萬別餵狗！被抓包會挨罵！</div>
+        </div>
+
+        <button id="startBtn" class="px-8 py-3.5 bg-gradient-to-r from-amber-500 to-red-600 hover:from-amber-400 hover:to-red-500 text-white font-black text-lg rounded-2xl shadow-lg transform active:scale-95 transition-all border-2 border-amber-300/80">
+          開始吃菜！（Start）
+        </button>
+      </div>
+
+      <!-- UI 遊戲結束 overlay -->
+      <div id="gameOverScreen" class="absolute inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-20 hidden">
+        <div id="gameOverEmoji" class="text-6xl mb-2">💥</div>
+        <h2 id="gameOverTitle" class="text-2xl font-black text-red-400 mb-1">胃袋爆炸了！</h2>
+        <p id="gameOverReason" class="text-xs text-amber-200/90 max-w-xs mb-4">阿嬤笑著說：「再吃兩碗白飯補一下！」</p>
+
+        <div class="bg-amber-950/80 border border-amber-500/40 p-4 rounded-2xl w-full max-w-xs mb-5 text-left space-y-2">
+          <div class="flex justify-between text-sm">
+            <span class="text-slate-400">生存時間：</span>
+            <span id="resTime" class="font-bold text-amber-300">0 秒</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-slate-400">最終得分：</span>
+            <span id="resScore" class="font-bold text-amber-400">0</span>
+          </div>
+          <div class="flex justify-between text-sm">
+            <span class="text-slate-400">救命餵狗：</span>
+            <span id="resFedCount" class="font-bold text-emerald-400">0 次</span>
+          </div>
+          <hr class="border-amber-800/60 my-2">
+          <div class="text-xs text-slate-400">獲得稱號：</div>
+          <div id="resTitle" class="text-lg font-black text-amber-300 text-center py-1 bg-amber-900/40 rounded-lg border border-amber-500/30">
+            阿嬤的終極食客
+          </div>
+        </div>
+
+        <button id="restartBtn" class="px-8 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-lg rounded-2xl shadow-lg transform active:scale-95 transition-all border-2 border-emerald-300/80">
+          再挑戰一輪！
+        </button>
+      </div>
+    </div>
+
+    <!-- 底部控制按鈕列（方便手機/觸控玩家操作） -->
+    <footer class="p-3 bg-amber-950 border-t border-amber-800/60 flex gap-2 items-center justify-between z-10">
+      <div class="text-[11px] text-amber-300/70 leading-tight">
+        💡 電腦：<span class="text-amber-200 font-bold">滑鼠/左右箭頭</span>移動<br>
+        ⌨️ 按 <span class="text-amber-200 font-bold">Space</span> 或點按鈕餵狗
+      </div>
+
+      <button id="feedDogBtn" class="flex-1 max-w-[200px] py-3 px-4 bg-gradient-to-r from-amber-600 to-amber-700 active:from-amber-500 active:to-amber-600 text-amber-100 font-black rounded-xl shadow-md border border-amber-400/50 flex items-center justify-center gap-2 transform active:scale-95 transition-all">
+        <span class="text-xl">🐕</span>
+        <div class="flex flex-col text-left">
+          <span class="text-xs leading-none">偷偷餵狗</span>
+          <span class="text-[9px] text-amber-200/80 leading-none mt-0.5">(SPACE)</span>
+        </div>
+      </button>
+    </footer>
+
+  </div>
+
+  <script>
+    /* ==========================================================================
+       遊戲整體邏輯與 Web Audio API 靜音/音效合成器
+       ========================================================================== */
+
+    // Web Audio API 靜效合成器 (不需外部 audio 檔案)
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      play(type) {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+
+        try {
+          if (type === 'eat') {
+            // 接食物/嚼嚼聲 (高頻短躍音)
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(200, now);
+            osc.frequency.exponentialRampToValueAtTime(450, now + 0.08);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.08);
+
+          } else if (type === 'dog') {
+            // 狗叫聲 (短促雙音)
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(400, now);
+            osc.frequency.exponentialRampToValueAtTime(150, now + 0.12);
+            gain.gain.setValueAtTime(0.4, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.12);
+
+          } else if (type === 'warning') {
+            // 阿嬤起疑心警報音 (高音逼逼聲)
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, now);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.12);
+
+          } else if (type === 'caught') {
+            // 抓包怒罵聲/低音巨響
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(180, now);
+            osc.frequency.linearRampToValueAtTime(50, now + 0.5);
+            gain.gain.setValueAtTime(0.6, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.5);
+
+          } else if (type === 'explode') {
+            // 爆胃音效 (低沉炸裂)
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(120, now);
+            osc.frequency.exponentialRampToValueAtTime(30, now + 0.4);
+            gain.gain.setValueAtTime(0.5, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.4);
+
+          } else if (type === 'click') {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, now);
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.05);
+          }
+        } catch(e) {
+          console.error(e);
+        }
+      }
+    }
+
+    const sound = new SoundEngine();
+
+    /* ==========================================================================
+       食物資料設定與遊戲全域變數
+       ========================================================================== */
+
+    const FOOD_TYPES = [
+      { name: '巨型豬腳', emoji: '🍖', stomach: 20, score: 200, radius: 24, speed: 2.8 },
+      { name: '澎湃龍蝦', emoji: '🦞', stomach: 25, score: 350, radius: 26, speed: 3.2 },
+      { name: '大碗白飯', emoji: '🍚', stomach: 12, score: 80,  radius: 20, speed: 2.5 },
+      { name: '高油爌肉', emoji: '🥓', stomach: 18, score: 180, radius: 22, speed: 3.0 },
+      { name: '香炸雞腿', emoji: '🍗', stomach: 15, score: 120, radius: 22, speed: 2.7 },
+      { name: '清炒高麗菜', emoji: '🥬', stomach: 6,  score: 50,  radius: 18, speed: 2.2 },
+      { name: '特製台式老辣醬', emoji: '🌶️', stomach: -15, score: 250, radius: 18, speed: 3.5, isSpecial: true }
+    ];
+
+    // Canvas 與 DOM 元素
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const stomachBar = document.getElementById('stomachBar');
+    const stomachText = document.getElementById('stomachText');
+    const stomachStatus = document.getElementById('stomachStatus');
+    const grandmaBadge = document.getElementById('grandmaBadge');
+    const grandmaIcon = document.getElementById('grandmaIcon');
+    const grandmaStatusText = document.getElementById('grandmaStatusText');
+
+    const startScreen = document.getElementById('startScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const startBtn = document.getElementById('startBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const feedDogBtn = document.getElementById('feedDogBtn');
+
+    // 遊戲動態狀態
+    let gameState = 'START'; // 'START', 'PLAYING', 'GAMEOVER'
+    let score = 0;
+    let stomach = 0;
+    let survivalTime = 0;
+    let fedDogCount = 0;
+    let frameCount = 0;
+    let animFrameId = null;
+
+    // 玩家飯碗
+    const player = {
+      x: 0,
+      y: 0,
+      width: 76,
+      height: 38,
+      speed: 7,
+      dx: 0
+    };
+
+    // 阿嬤視線狀態機 ('SAFE', 'WARNING', 'WATCHING')
+    let grandmaState = 'SAFE';
+    let grandmaTimer = 0;
+    let grandmaNextChange = 180; // 約 3 秒後觸發警戒
+
+    // 物件陣列
+    let foods = [];
+    let particles = [];
+    let floatingTexts = [];
+
+    // 按鍵狀態
+    const keys = {
+      left: false,
+      right: false
+    };
+
+    /* ==========================================================================
+       繪圖與 RWD 畫布調整
+       ========================================================================== */
+
+    function resizeCanvas() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      player.y = canvas.height - 55;
+      if (player.x === 0) player.x = canvas.width / 2;
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    /* ==========================================================================
+       遊戲核心循環 (Game Loop)
+       ========================================================================== */
+
+    function startGame() {
+      sound.init();
+      sound.play('click');
+
+      // 重置變數
+      score = 0;
+      stomach = 10; // 起始 10% 胃容量
+      survivalTime = 0;
+      fedDogCount = 0;
+      frameCount = 0;
+      foods = [];
+      particles = [];
+      floatingTexts = [];
+
+      grandmaState = 'SAFE';
+      grandmaTimer = 0;
+      grandmaNextChange = 150 + Math.random() * 120;
+
+      updateGrandmaUI();
+      updateStomachUI();
+      scoreDisplay.innerText = '0';
+
+      startScreen.classList.add('hidden');
+      gameOverScreen.classList.add('hidden');
+
+      gameState = 'PLAYING';
+
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      lastTime = performance.now();
+      requestAnimationFrame(gameLoop);
+    }
+
+    let lastTime = 0;
+    function gameLoop(now) {
+      if (gameState !== 'PLAYING') return;
+
+      const dt = (now - lastTime) / 1000;
+      lastTime = now;
+
+      frameCount++;
+      if (frameCount % 60 === 0) {
+        survivalTime++;
+      }
+
+      update(dt);
+      render();
+
+      animFrameId = requestAnimationFrame(gameLoop);
+    }
+
+    /* ==========================================================================
+       邏輯更新 (Update Logic)
+       ========================================================================== */
+
+    function update(dt) {
+      // 1. 玩家移動控制
+      if (keys.left) player.x -= player.speed;
+      if (keys.right) player.x += player.speed;
+
+      // 限制玩家邊界
+      const halfW = player.width / 2;
+      if (player.x < halfW) player.x = halfW;
+      if (player.x > canvas.width - halfW) player.x = canvas.width - halfW;
+
+      // 2. 阿嬤警戒狀態邏輯更新
+      grandmaTimer++;
+      if (grandmaState === 'SAFE') {
+        if (grandmaTimer >= grandmaNextChange) {
+          grandmaState = 'WARNING';
+          grandmaTimer = 0;
+          sound.play('warning');
+          updateGrandmaUI();
+          spawnFloatingText(canvas.width - 80, 50, '⚠️ 警告！阿嬤要轉頭了！', '#f59e0b', 18);
+        }
+      } else if (grandmaState === 'WARNING') {
+        if (grandmaTimer >= 45) { // 約 0.75 秒警示時間
+          grandmaState = 'WATCHING';
+          grandmaTimer = 0;
+          sound.play('warning');
+          updateGrandmaUI();
+
+          // 隨時間拉長，阿嬤盯著的時間縮短或增加難度
+          const watchDuration = Math.max(70, 140 - Math.floor(survivalTime * 1.2));
+          grandmaNextChange = watchDuration;
+        }
+      } else if (grandmaState === 'WATCHING') {
+        if (grandmaTimer >= grandmaNextChange) {
+          grandmaState = 'SAFE';
+          grandmaTimer = 0;
+          updateGrandmaUI();
+          // 下一次轉頭隨機間隔
+          grandmaNextChange = Math.max(90, 180 - Math.floor(survivalTime * 1.5)) + Math.random() * 100;
+        }
+      }
+
+      // 3. 食物生成
+      const spawnRate = Math.max(25, 50 - Math.floor(survivalTime / 3));
+      if (frameCount % spawnRate === 0) {
+        spawnFood();
+      }
+
+      // 4. 更新食物位置與碰撞檢測
+      for (let i = foods.length - 1; i >= 0; i--) {
+        const f = foods[i];
+        f.y += f.speed;
+        f.rotation += f.rotSpeed;
+
+        // 碰撞判斷（食物撞擊碗）
+        const bowlTop = player.y - player.height / 2;
+        if (
+          f.y + f.radius >= bowlTop &&
+          f.y - f.radius <= player.y + player.height / 2 &&
+          f.x >= player.x - player.width / 2 - 10 &&
+          f.x <= player.x + player.width / 2 + 10
+        ) {
+          // 接到食物！
+          eatFood(f);
+          foods.splice(i, 1);
+          continue;
+        }
+
+        // 食物掉落地面（阿嬤撿起來重新盛）
+        if (f.y - f.radius > canvas.height) {
+          foods.splice(i, 1);
+        }
+      }
+
+      // 5. 更新粒子
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life--;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+
+      // 6. 更新浮動文字
+      for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const ft = floatingTexts[i];
+        ft.y -= 0.8;
+        ft.life--;
+        if (ft.life <= 0) floatingTexts.splice(i, 1);
+      }
+
+      // 7. 檢查胃容量是否爆表 (100%)
+      if (stomach >= 100) {
+        stomach = 100;
+        updateStomachUI();
+        sound.play('explode');
+        triggerGameOver('胃袋徹底爆炸了！💥', '阿嬤笑著說：「才吃這樣？阿嬤再去添三碗飯！」');
+      }
+    }
+
+    /* ==========================================================================
+       玩家動作 (接食物 & 偷偷餵狗)
+       ========================================================================== */
+
+    function spawnFood() {
+      // 隨機挑選食物種類
+      const type = FOOD_TYPES[Math.floor(Math.random() * FOOD_TYPES.length)];
+      foods.push({
+        ...type,
+        x: 30 + Math.random() * (canvas.width - 60),
+        y: -30,
+        rotation: Math.random() * Math.PI * 2,
+        rotSpeed: (Math.random() - 0.5) * 0.05
+      });
+    }
+
+    function eatFood(food) {
+      sound.play('eat');
+
+      stomach += food.stomach;
+      if (stomach < 0) stomach = 0;
+      score += food.score;
+
+      scoreDisplay.innerText = score;
+      updateStomachUI();
+
+      // 效果與浮動字
+      const color = food.stomach > 0 ? '#ef4444' : '#22c55e';
+      const text = food.stomach > 0 ? `胃 +${food.stomach}%` : `胃 ${food.stomach}% (爽!)`;
+      spawnFloatingText(food.x, player.y - 30, text, color, 20);
+
+      // 產生食物屑屑粒子
+      for (let i = 0; i < 8; i++) {
+        particles.push({
+          x: food.x,
+          y: player.y - 10,
+          vx: (Math.random() - 0.5) * 5,
+          vy: (Math.random() - 0.5) * 4 - 2,
+          life: 20 + Math.random() * 15,
+          color: food.stomach > 0 ? '#f59e0b' : '#ef4444',
+          size: 3 + Math.random() * 4
+        });
+      }
+    }
+
+    function feedDog() {
+      if (gameState !== 'PLAYING') return;
+
+      // 核心機制：阿嬤盯著時絕對不能餵狗！
+      if (grandmaState === 'WATCHING') {
+        sound.play('caught');
+        triggerGameOver('被阿嬤當場抓包！👵💢', '「這很貴餒！拿去夾給狗吃？不准浪費食物！」');
+        return;
+      }
+
+      if (stomach <= 0) {
+        spawnFloatingText(player.x, player.y - 40, '碗裡空的，沒東西餵狗！', '#94a3b8', 16);
+        return;
+      }
+
+      // 順利餵狗
+      const reduceVal = Math.min(stomach, 18 + Math.floor(Math.random() * 8));
+      stomach -= reduceVal;
+      fedDogCount++;
+      score += 150;
+
+      scoreDisplay.innerText = score;
+      updateStomachUI();
+      sound.play('dog');
+
+      // 狗的位置 (右下角)
+      const dogX = canvas.width - 45;
+      const dogY = canvas.height - 35;
+
+      spawnFloatingText(dogX - 20, dogY - 30, `汪！胃 -${reduceVal}%`, '#22c55e', 20);
+      spawnFloatingText(player.x, player.y - 40, '成功偷偷餵狗！', '#38bdf8', 16);
+
+      // 丟食物飛向狗的粒子效果
+      for (let i = 0; i < 6; i++) {
+        particles.push({
+          x: player.x,
+          y: player.y - 20,
+          vx: (dogX - player.x) / 18 + (Math.random() - 0.5) * 2,
+          vy: (dogY - player.y) / 18 + (Math.random() - 0.5) * 3 - 2,
+          life: 18,
+          color: '#fbbf24',
+          size: 6,
+          isBone: true
+        });
+      }
+    }
+
+    /* ==========================================================================
+       UI 狀態同步與畫面繪製 (Render)
+       ========================================================================== */
+
+    function updateStomachUI() {
+      stomachBar.style.width = `${Math.min(100, Math.max(0, stomach))}%`;
+      stomachText.innerText = `${Math.floor(stomach)}%`;
+
+      const outer = document.getElementById('stomachBarOuter');
+      if (stomach >= 80) {
+        stomachStatus.innerText = '胃快爆了！';
+        stomachStatus.className = 'text-[10px] px-1.5 py-0.5 rounded bg-red-600 text-red-100 font-bold shake-anim';
+        outer.classList.add('danger-border');
+      } else if (stomach >= 50) {
+        stomachStatus.innerText = '快撐不住';
+        stomachStatus.className = 'text-[10px] px-1.5 py-0.5 rounded bg-amber-600 text-amber-100 font-bold';
+        outer.classList.remove('danger-border');
+      } else {
+        stomachStatus.innerText = '還能塞';
+        stomachStatus.className = 'text-[10px] px-1.5 py-0.5 rounded bg-emerald-800 text-emerald-200 font-bold';
+        outer.classList.remove('danger-border');
+      }
+    }
+
+    function updateGrandmaUI() {
+      if (grandmaState === 'SAFE') {
+        grandmaIcon.innerText = '👵';
+        grandmaStatusText.innerText = '專心煮菜中';
+        grandmaStatusText.className = 'text-xs font-black text-emerald-400';
+        grandmaBadge.className = 'flex items-center gap-2 bg-emerald-950 border border-emerald-500/50 px-2.5 py-1.5 rounded-xl w-full justify-center';
+      } else if (grandmaState === 'WARNING') {
+        grandmaIcon.innerText = '⚠️';
+        grandmaStatusText.innerText = '準備轉頭！';
+        grandmaStatusText.className = 'text-xs font-black text-amber-300 animate-pulse';
+        grandmaBadge.className = 'flex items-center gap-2 bg-amber-950 border border-amber-500 px-2.5 py-1.5 rounded-xl w-full justify-center shake-anim';
+      } else if (grandmaState === 'WATCHING') {
+        grandmaIcon.innerText = '👀';
+        grandmaStatusText.innerText = '死死盯著你！';
+        grandmaStatusText.className = 'text-xs font-black text-red-400';
+        grandmaBadge.className = 'flex items-center gap-2 bg-red-950 border-2 border-red-500 px-2.5 py-1.5 rounded-xl w-full justify-center danger-border';
+      }
+    }
+
+    function render() {
+      // 畫布背景 (溫馨台式圓桌風格)
+      ctx.fillStyle = '#fef3c7'; // 淺黃色桌布
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 畫桌布紅白格紋細節
+      ctx.strokeStyle = 'rgba(217, 119, 6, 0.12)';
+      ctx.lineWidth = 2;
+      const gridSize = 40;
+      for (let x = 0; x < canvas.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      // 1. 繪製小黃狗 (右下角)
+      const dogX = canvas.width - 50;
+      const dogY = canvas.height - 45;
+
+      ctx.save();
+      ctx.font = '36px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🐕', dogX, dogY);
+
+      // 狗碗
+      ctx.font = '20px sans-serif';
+      ctx.fillText('🥣', dogX - 15, dogY + 18);
+      ctx.restore();
+
+      // 2. 繪製掉落中的食物
+      foods.forEach(f => {
+        ctx.save();
+        ctx.translate(f.x, f.y);
+        ctx.rotate(f.rotation);
+        ctx.font = `${f.radius * 2}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(f.emoji, 0, 0);
+        ctx.restore();
+      });
+
+      // 3. 繪製玩家飯碗 (底端)
+      ctx.save();
+      ctx.translate(player.x, player.y);
+
+      // 畫傳統青花瓷碗外型
+      ctx.beginPath();
+      ctx.ellipse(0, 0, player.width / 2, player.height / 2, 0, 0, Math.PI);
+      ctx.fillStyle = '#2563eb'; // 藍色碗身
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#1e40af';
+      ctx.stroke();
+
+      // 碗內白飯圖案
+      ctx.beginPath();
+      ctx.ellipse(0, -2, player.width / 2 - 4, player.height / 4, 0, Math.PI, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+
+      // 筷子圖樣
+      ctx.font = '24px sans-serif';
+      ctx.fillText('🥢', 15, -12);
+
+      ctx.restore();
+
+      // 4. 繪製粒子效果
+      particles.forEach(p => {
+        ctx.save();
+        if (p.isBone) {
+          ctx.font = '14px sans-serif';
+          ctx.fillText('🦴', p.x, p.y);
+        } else {
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      });
+
+      // 5. 繪製浮動動態文字
+      floatingTexts.forEach(ft => {
+        ctx.save();
+        ctx.font = `900 ${ft.size}px 'Noto Sans TC', sans-serif`;
+        ctx.fillStyle = ft.color;
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.shadowBlur = 4;
+        ctx.textAlign = 'center';
+        ctx.fillText(ft.text, ft.x, ft.y);
+        ctx.restore();
+      });
+    }
+
+    function spawnFloatingText(x, y, text, color, size = 18) {
+      floatingTexts.push({ x, y, text, color, size, life: 40 });
+    }
+
+    /* ==========================================================================
+       結算與遊戲結束處理
+       ========================================================================== */
+
+    function triggerGameOver(title, reason) {
+      gameState = 'GAMEOVER';
+
+      document.getElementById('gameOverTitle').innerText = title;
+      document.getElementById('gameOverReason').innerText = reason;
+
+      document.getElementById('resTime').innerText = `${survivalTime} 秒`;
+      document.getElementById('resScore').innerText = score;
+      document.getElementById('resFedCount').innerText = `${fedDogCount} 次`;
+
+      // 產生搞笑在地稱號
+      let titleName = '阿嬤的終極食客 🍚';
+      if (fedDogCount >= 12) {
+        titleName = '小黃狗的救世主 🐶 (狗比你還胖)';
+      } else if (survivalTime >= 45) {
+        titleName = '鋼鐵黑洞橡皮胃 🏆 (阿嬤表示欣慰)';
+      } else if (title.includes('抓包')) {
+        titleName = '偷雞不著蝕把米 👵 (罰站洗碗三小時)';
+      } else if (survivalTime < 15) {
+        titleName = '戰力薄弱的小鳥胃 🐣 (連第一道菜都撐不過)';
+      }
+
+      document.getElementById('resTitle').innerText = titleName;
+      gameOverScreen.classList.remove('hidden');
+    }
+
+    /* ==========================================================================
+       事件監聽與控制操作
+       ========================================================================== */
+
+    // 電腦鍵盤控制
+    window.addEventListener('keydown', e => {
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        feedDog();
+      }
+    });
+
+    window.addEventListener('keyup', e => {
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+    });
+
+    // 滑鼠與觸控移動控制（碗跟隨指標）
+    function handlePointerMove(e) {
+      if (gameState !== 'PLAYING') return;
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      player.x = clientX - rect.left;
+    }
+
+    canvas.addEventListener('mousemove', handlePointerMove);
+    canvas.addEventListener('touchmove', e => {
+      handlePointerMove(e);
+      e.preventDefault();
+    }, { passive: false });
+
+    // 偷偷餵狗按鈕點擊
+    feedDogBtn.addEventListener('click', () => {
+      sound.init();
+      feedDog();
+    });
+
+    startBtn.addEventListener('click', startGame);
+    restartBtn.addEventListener('click', startGame);
+
+    // 初始化調整大小
+    resizeCanvas();
+  </script>
+</body>
+</html>
